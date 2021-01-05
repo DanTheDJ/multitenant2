@@ -43,6 +43,7 @@ class TenantResolver
     {
         $this->activeTenant = $activeTenant;
         $this->setDefaultConnection($activeTenant);
+        $this->setCachePrefix($activeTenant);
 
         event(new TenantActivatedEvent($activeTenant));
     }
@@ -189,9 +190,10 @@ class TenantResolver
 
         return;
     }
-
-    protected function setDefaultConnection($activeTenant)
+    
+    protected function getTenantDatabaseName($activeTenant)
     {
+
         $hasConnection = ! empty($activeTenant->connection);
         $connection = $hasConnection ? $activeTenant->connection : $this->tenantConnection;
         $databaseName = ($hasConnection && ! empty($activeTenant->subdomain)) ? $activeTenant->subdomain : '';
@@ -202,8 +204,22 @@ class TenantResolver
             throw new TenantDatabaseNameEmptyException();
         }
 
+        $dbName = $databasePrefix . $databaseName;
+
+        return $dbName;
+
+    }
+
+    protected function setDefaultConnection($activeTenant)
+    {
+
+        $hasConnection = ! empty($activeTenant->connection);
+        $connection = $hasConnection ? $activeTenant->connection : $this->tenantConnection;
+
+        $dbName = $this->getTenantDatabaseName($activeTenant);
+
         config()->set('database.default', $connection);
-        config()->set('database.connections.' . $connection . '.database', $databasePrefix . $databaseName);
+        config()->set('database.connections.' . $connection . '.database', $dbName);
 
         if ($hasConnection)
         {
@@ -214,6 +230,19 @@ class TenantResolver
         $this->app['db']->setDefaultConnection($connection);
 
         $this->purgeConnection();
+
+    }
+
+    protected function setCachePrefix($activeTenant)
+    {
+
+        $dbName = $this->getTenantDatabaseName($activeTenant);
+
+        $newPrefix = config()->get('cache.prefix');
+
+        $newPrefix .= "-".$dbName;
+
+        config()->set('cache.prefix', $newPrefix);
 
     }
 
