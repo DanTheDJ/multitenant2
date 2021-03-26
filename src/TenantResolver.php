@@ -17,6 +17,8 @@ use DanTheDJ\MultiTenant\Events\TenantNotResolvedEvent;
 use DanTheDJ\MultiTenant\Events\TenantNotResolvedException;
 use DanTheDJ\MultiTenant\Contracts\TenantContract;
 
+use Illuminate\Contracts\Cache\Factory;
+
 class TenantResolver
 {
     protected $app = null;
@@ -27,13 +29,28 @@ class TenantResolver
     protected $defaultConnection = null;
     protected $tenantConnection = null;
 
+    protected $cacheStore = null;
+    
+    protected $cache;
+    protected $resolverCacheEnabled = false;
+    protected $resolverCacheTTL = 0;
+
     public function __construct(Application $app, TenantContract $tenant)
     {
+        
+        $cacheFactory = app(Factory::class);
+
         $this->app = $app;
         $this->tenant = $tenant;
         $this->defaultConnection = $this->app['db']->getDefaultConnection();
         $this->tenantConnection = 'envtenant';
+
+        $this->cache = $cacheFactory->store($this->cacheStore);
+        $this->resolverCacheEnabled = config('multitenant.resolver.cache.enabled');
+        $this->resolverCacheTTL = config('multitenant.resolver.cache.ttl_seconds');
+
         config()->set('database.connections.' . $this->tenantConnection, config('database.connections.' . $this->defaultConnection));
+
     }
 
     public function setActiveTenant(TenantContract $activeTenant)
@@ -90,6 +107,18 @@ class TenantResolver
         return ! is_null($this->getActiveTenant());
     }
 
+    private function resolveByRequestDomains($subdomain, $domain)
+    {
+
+        $model = $this->tenant;
+
+        return $model
+            ->where('subdomain', '=', $subdomain)
+            ->orWhere('alias_domain', '=', $domain)
+            ->first();
+
+    }
+
     protected function resolveRequest()
     {
         if ($this->app->runningInConsole())
@@ -122,13 +151,26 @@ class TenantResolver
             $id = $this->request->segment(1);
 
             $model = $this->tenant;
-            $tenant = $model
-                ->where(function($query) use ($subdomain, $domain)
-                {
-                    $query->where('subdomain', '=', $subdomain);
-                    $query->orWhere('alias_domain', '=', $domain);
-                })
-                ->first();
+
+            if($this->resolverCacheEnabled)
+            {
+
+                $cacheKey = 'multitenant-resolver:'.$subdomain.'-'.$domain;
+
+                $tenant = $this->cache->remember($cacheKey, now()->addSeconds($this->resolverCacheTTL), function() use($model, $subdomain, $domain) {
+                
+                    return $this->resolveByRequestDomains($subdomain, $domain);
+    
+                });
+
+            }
+            else
+            {
+
+                $tenant = $this->resolveByRequestDomains($subdomain, $domain);
+
+            }
+
         }
 
         if (

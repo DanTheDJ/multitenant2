@@ -7,6 +7,9 @@ class TenantServiceProvider extends ServiceProvider
 {
     public function register()
     {
+
+        $this->mergeConfigFrom(__DIR__ . '/../assets/config.php', 'multitenant');
+
         $this->app->bindIf('TenantContract', function()
         {
             return new Tenant();
