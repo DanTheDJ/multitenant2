@@ -2,6 +2,7 @@
     "name": "danthedj/multitenant2",
     "description": "Laravel Tenant Dynamic Database Solution.",
     "license": "MIT",
+    "type": "library",
     "authors": [
         {
             "name": "leemason",
