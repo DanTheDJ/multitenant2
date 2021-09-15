@@ -115,12 +115,14 @@ class TenantResolver
         return $model
             ->where('subdomain', '=', $subdomain)
             ->orWhere('alias_domain', '=', $domain)
-            ->first();
+            ->first()
+            ->id;
 
     }
 
     protected function resolveRequest()
     {
+
         if ($this->app->runningInConsole())
         {
             $domain = (new ArgvInput())->getParameterOption('--tenant', null);
@@ -145,6 +147,7 @@ class TenantResolver
         }
         else
         {
+
             $this->request = $this->app->make(Request::class);
             $domain = $this->request->getHost();
             $subdomain = explode('.', $domain)[0];
@@ -152,12 +155,14 @@ class TenantResolver
 
             $model = $this->tenant;
 
+            $tenantId = null;
+
             if($this->resolverCacheEnabled)
             {
 
                 $cacheKey = 'multitenant-resolver:'.$subdomain.'-'.$domain;
 
-                $tenant = $this->cache->remember($cacheKey, now()->addSeconds($this->resolverCacheTTL), function() use($model, $subdomain, $domain) {
+                $tenantId = $this->cache->remember($cacheKey, now()->addSeconds($this->resolverCacheTTL), function() use($model, $subdomain, $domain) {
                 
                     return $this->resolveByRequestDomains($subdomain, $domain);
     
@@ -167,9 +172,11 @@ class TenantResolver
             else
             {
 
-                $tenant = $this->resolveByRequestDomains($subdomain, $domain);
+                $tenantId = $this->resolveByRequestDomains($subdomain, $domain);
 
             }
+
+            $tenant = $model::find($tenantId);
 
         }
 
